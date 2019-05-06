@@ -29,8 +29,11 @@ func WrapRedisClient(ctx context.Context, client *redis.Client) *redis.Client {
 func process(parentSpan opentracing.Span, opts *redis.Options) func(oldProcess func(cmd redis.Cmder) error) func(cmd redis.Cmder) error {
 	return func(oldProcess func(cmd redis.Cmder) error) func(cmd redis.Cmder) error {
 		return func(cmd redis.Cmder) error {
+			tracer := parentSpan.Tracer()
+			span := tracer.StartSpan("redis-cmd", opentracing.ChildOf(parentSpan.Context()))
+			defer span.Finish()
 			dbMethod := formatCommandAsDbMethod(cmd)
-			doSpan(parentSpan, opts, "redis-cmd", dbMethod)
+			configureSpanTags(span, opts, dbMethod)
 			return oldProcess(cmd)
 		}
 	}
@@ -39,8 +42,11 @@ func process(parentSpan opentracing.Span, opts *redis.Options) func(oldProcess f
 func processPipeline(parentSpan opentracing.Span, opts *redis.Options) func(oldProcess func(cmds []redis.Cmder) error) func(cmds []redis.Cmder) error {
 	return func(oldProcess func(cmds []redis.Cmder) error) func(cmds []redis.Cmder) error {
 		return func(cmds []redis.Cmder) error {
+			tracer := parentSpan.Tracer()
+			span := tracer.StartSpan("redis-pipeline-cmd", opentracing.ChildOf(parentSpan.Context()))
+			defer span.Finish()
 			dbMethod := formatCommandsAsDbMethods(cmds)
-			doSpan(parentSpan, opts, "redis-pipeline-cmd", dbMethod)
+			configureSpanTags(span, opts, dbMethod)
 			return oldProcess(cmds)
 		}
 	}
@@ -59,10 +65,7 @@ func formatCommandsAsDbMethods(cmds []redis.Cmder) string {
 	return strings.Join(cmdsAsDbMethods, " -> ")
 }
 
-func doSpan(parentSpan opentracing.Span, opts *redis.Options, operationName, dbMethod string) {
-	tracer := parentSpan.Tracer()
-	span := tracer.StartSpan(operationName, opentracing.ChildOf(parentSpan.Context()))
-	defer span.Finish()
+func configureSpanTags(span opentracing.Span, opts *redis.Options, dbMethod string) {
 	ext.DBType.Set(span, "redis")
 	ext.PeerAddress.Set(span, opts.Addr)
 	ext.SpanKind.Set(span, ext.SpanKindEnum("client"))
