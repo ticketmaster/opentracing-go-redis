@@ -33,7 +33,7 @@ func process(parentSpan opentracing.Span, opts *redis.Options) func(oldProcess f
 			span := tracer.StartSpan("redis-cmd", opentracing.ChildOf(parentSpan.Context()))
 			defer span.Finish()
 			dbMethod := formatCommandAsDbMethod(cmd)
-			configureSpan(span, opts, dbMethod)
+			configureSpanTags(span, opts, dbMethod)
 			return oldProcess(cmd)
 		}
 	}
@@ -46,7 +46,7 @@ func processPipeline(parentSpan opentracing.Span, opts *redis.Options) func(oldP
 			span := tracer.StartSpan("redis-pipeline-cmd", opentracing.ChildOf(parentSpan.Context()))
 			defer span.Finish()
 			dbMethod := formatCommandsAsDbMethods(cmds)
-			configureSpan(span, opts, dbMethod)
+			configureSpanTags(span, opts, dbMethod)
 			return oldProcess(cmds)
 		}
 	}
@@ -65,17 +65,7 @@ func formatCommandsAsDbMethods(cmds []redis.Cmder) string {
 	return strings.Join(cmdsAsDbMethods, " -> ")
 }
 
-func doSpan(parentSpan opentracing.Span, opts *redis.Options, operationName, dbMethod string) {
-	tracer := parentSpan.Tracer()
-	span := tracer.StartSpan(operationName, opentracing.ChildOf(parentSpan.Context()))
-	defer span.Finish()
-	ext.DBType.Set(span, "redis")
-	ext.PeerAddress.Set(span, opts.Addr)
-	ext.SpanKind.Set(span, ext.SpanKindEnum("client"))
-	span.SetTag("db.method", dbMethod)
-}
-
-func configureSpan(span opentracing.Span, opts *redis.Options, dbMethod string) {
+func configureSpanTags(span opentracing.Span, opts *redis.Options, dbMethod string) {
 	ext.DBType.Set(span, "redis")
 	ext.PeerAddress.Set(span, opts.Addr)
 	ext.SpanKind.Set(span, ext.SpanKindEnum("client"))
